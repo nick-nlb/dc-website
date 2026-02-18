@@ -67,11 +67,7 @@ import {
   IsLoadingWrapper,
   PlaceInfo,
 } from "./context";
-import {
-  getStatAllWithinPlace,
-  getStatWithinPlace,
-  ScatterChartType,
-} from "./util";
+import { getStatAllWithinPlace, getStatWithinPlace } from "./util";
 
 type Cache = {
   // key here is stat var.
@@ -141,7 +137,7 @@ export function ChartLoader(): ReactElement {
 
   /**
    * Convert facet metadata and mappings (derived from the chart store) into a format
-   * to be used for citation display in the embed modal.
+   * to be used for citation display in the embed modal, as well as the metadata modal.
    */
   const { facets, statVarToFacets } = useMemo(() => {
     const facets: Record<string, StatMetadata> = {};
@@ -162,14 +158,29 @@ export function ChartLoader(): ReactElement {
         if (!statVarToFacets[statVarDcid]) {
           statVarToFacets[statVarDcid] = new Set();
         }
-        for (const facetId in cache.baseFacets[statVarDcid]) {
-          statVarToFacets[statVarDcid].add(facetId);
+
+        // Check if there is a specific facet selected for this variable
+        let selectedFacetId = null;
+        if (xVal.statVarDcid === statVarDcid && xVal.metahash) {
+          selectedFacetId = xVal.metahash;
+        } else if (yVal.statVarDcid === statVarDcid && yVal.metahash) {
+          selectedFacetId = yVal.metahash;
+        }
+
+        // If a specific facet is selected, only add that one.
+        // Otherwise, we add all available facets.
+        if (selectedFacetId) {
+          statVarToFacets[statVarDcid].add(selectedFacetId);
+        } else {
+          for (const facetId in cache.baseFacets[statVarDcid]) {
+            statVarToFacets[statVarDcid].add(facetId);
+          }
         }
       }
     }
 
     return { facets, statVarToFacets };
-  }, [cache]);
+  }, [cache, xVal, yVal]);
 
   /**
    * Callback function for building observation specifications.
@@ -310,6 +321,9 @@ export function ChartLoader(): ReactElement {
                 placeInfo={place.value}
                 display={display}
                 sources={chartData.sources}
+                facets={facets}
+                statVarToFacets={statVarToFacets}
+                statVarSpecs={currentStatVarSpecs}
                 svFacetId={{
                   [x.value.statVarDcid]: x.value.metahash,
                   [y.value.statVarDcid]: y.value.metahash,
