@@ -160,17 +160,19 @@ export function ChartLoader(): ReactElement {
         }
 
         // Check if there is a specific facet selected for this variable
-        let selectedFacetId = null;
+        const selectedFacetIds = new Set<string>();
+
         if (xVal.statVarDcid === statVarDcid && xVal.metahash) {
-          selectedFacetId = xVal.metahash;
-        } else if (yVal.statVarDcid === statVarDcid && yVal.metahash) {
-          selectedFacetId = yVal.metahash;
+          selectedFacetIds.add(xVal.metahash);
+        }
+        if (yVal.statVarDcid === statVarDcid && yVal.metahash) {
+          selectedFacetIds.add(yVal.metahash);
         }
 
-        // If a specific facet is selected, only add that one.
-        // Otherwise, we add all available facets.
-        if (selectedFacetId) {
-          statVarToFacets[statVarDcid].add(selectedFacetId);
+        if (selectedFacetIds.size > 0) {
+          selectedFacetIds.forEach((id) =>
+            statVarToFacets[statVarDcid].add(id)
+          );
         } else {
           for (const facetId in cache.baseFacets[statVarDcid]) {
             statVarToFacets[statVarDcid].add(facetId);
@@ -180,7 +182,7 @@ export function ChartLoader(): ReactElement {
     }
 
     return { facets, statVarToFacets };
-  }, [cache, xVal, yVal]);
+  }, [cache, xVal.statVarDcid, xVal.metahash, yVal.statVarDcid, yVal.metahash]);
 
   /**
    * Callback function for building observation specifications.
