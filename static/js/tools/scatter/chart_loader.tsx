@@ -436,11 +436,14 @@ async function loadData(
     }
 
     const allStatVarsData = statAllResponse.data;
+    const noDataError =
+      _.isEmpty(statResponse.data) ||
+      Object.values(statResponse.data).every(_.isEmpty);
     const cache: Cache = {
       allStatVarsData,
       metadataMap,
       baseFacets,
-      noDataError: _.isEmpty(statResponse.data),
+      noDataError,
       error: false,
       populationData,
       statVarsData: statResponse.data,
@@ -492,13 +495,7 @@ function useChartData(cache: Cache): ChartData {
     ) {
       return;
     }
-    const chartData = getChartData(
-      xVal,
-      yVal,
-      placeVal,
-      display.chartType,
-      cache
-    );
+    const chartData = getChartData(xVal, yVal, placeVal, cache);
     setChartData(chartData);
 
     const downloadButton = document.getElementById("download-link");
@@ -549,7 +546,6 @@ function getChartData(
   x: Axis,
   y: Axis,
   place: PlaceInfo,
-  chartType: ScatterChartType,
   cache: Cache
 ): ChartData {
   let xStatData = extractFacetData(
@@ -566,10 +562,6 @@ function getChartData(
   if (_.isEmpty(yStatData)) {
     yStatData = cache.statVarsData[y.statVarDcid];
   }
-  const popBounds: [number, number] =
-    chartType === ScatterChartType.MAP
-      ? null
-      : [place.lowerBound, place.upperBound];
   const points = {};
   const sources: Set<string> = new Set();
   let xUnit = "";
@@ -585,8 +577,7 @@ function getChartData(
       cache.populationData,
       cache.metadataMap,
       xDenom,
-      yDenom,
-      popBounds
+      yDenom
     );
     if (_.isEmpty(placeChartData)) {
       continue;
@@ -655,9 +646,7 @@ function areDataLoaded(
   const yStatVar = y.statVarDcid;
   return (
     xStatVar in cache.statVarsData &&
-    !_.isEmpty(cache.statVarsData[xStatVar]) &&
     yStatVar in cache.statVarsData &&
-    !_.isEmpty(cache.statVarsData[yStatVar]) &&
     cache.xAxis.date === x.date &&
     cache.yAxis.date === y.date &&
     cache.xAxis.denom === x.denom &&
