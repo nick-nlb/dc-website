@@ -88,15 +88,21 @@ type ChartData = {
   sources: Set<string>;
   xUnit: string;
   yUnit: string;
+  xDenomFacets: Set<string>;
+  yDenomFacets: Set<string>;
+  xNumerFacets: Set<string>;
+  yNumerFacets: Set<string>;
 };
 
 export function ChartLoader(): ReactElement {
   const { x, y, place, display } = useContext(Context);
   const cache = useCache();
   const chartData = useChartData(cache);
-
   const { facetSelectorMetadata, facetListLoading, facetListError } =
-    useFacetMetadata(cache?.baseFacets || null);
+    useFacetMetadata(cache?.baseFacets || null, {
+      parentPlace: place.value.enclosingPlace.dcid,
+      enclosedPlaceType: place.value.enclosedPlaceType,
+    });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const embedModalElement = useRef<ChartEmbed>(null);
@@ -143,47 +149,52 @@ export function ChartLoader(): ReactElement {
     const facets: Record<string, StatMetadata> = {};
     const statVarToFacets: StatVarFacetMap = {};
 
-    if (!cache) return { facets, statVarToFacets };
-
-    // We create the facet map from the cache's metadataMap.
-    if (cache.metadataMap) {
-      for (const facetId in cache.metadataMap) {
-        facets[facetId] = cache.metadataMap[facetId];
-      }
+    if (!cache || !cache.metadataMap || !chartData) {
+      return { facets, statVarToFacets };
     }
 
-    // We then build the statVar to facet mapping from baseFacets.
-    if (cache.baseFacets) {
-      for (const statVarDcid in cache.baseFacets) {
-        if (!statVarToFacets[statVarDcid]) {
-          statVarToFacets[statVarDcid] = new Set();
-        }
+    // Helper to map plotted facets to their variable and populate metadata
+    const processFacets = (
+      statVarDcid: string,
+      plottedFacets: Set<string>
+    ): void => {
+      if (!statVarDcid || !plottedFacets || plottedFacets.size === 0) return;
 
-        // Check if there is a specific facet selected for this variable
-        const selectedFacetIds = new Set<string>();
+      if (!statVarToFacets[statVarDcid]) {
+        statVarToFacets[statVarDcid] = new Set();
+      }
 
-        if (xVal.statVarDcid === statVarDcid && xVal.metahash) {
-          selectedFacetIds.add(xVal.metahash);
-        }
-        if (yVal.statVarDcid === statVarDcid && yVal.metahash) {
-          selectedFacetIds.add(yVal.metahash);
-        }
-
-        if (selectedFacetIds.size > 0) {
-          selectedFacetIds.forEach((id) =>
-            statVarToFacets[statVarDcid].add(id)
-          );
-        } else {
-          // if no facet is selected, we add all facets associated with the variable
-          for (const facetId in cache.baseFacets[statVarDcid]) {
-            statVarToFacets[statVarDcid].add(facetId);
-          }
+      for (const facetId of Array.from(plottedFacets)) {
+        statVarToFacets[statVarDcid].add(facetId);
+        if (cache.metadataMap[facetId]) {
+          facets[facetId] = cache.metadataMap[facetId];
         }
       }
+    };
+
+    //Add in numerators that appear in the chart
+    processFacets(xVal.statVarDcid, chartData.xNumerFacets);
+    processFacets(yVal.statVarDcid, chartData.yNumerFacets);
+
+    //Add in denominators that appear in the chart
+    if (xVal.perCapita && xVal.denom) {
+      processFacets(xVal.denom, chartData.xDenomFacets);
+    }
+    if (yVal.perCapita && yVal.denom) {
+      processFacets(yVal.denom, chartData.yDenomFacets);
     }
 
     return { facets, statVarToFacets };
-  }, [cache, xVal.statVarDcid, xVal.metahash, yVal.statVarDcid, yVal.metahash]);
+  }, [
+    cache,
+    chartData,
+    xVal.statVarDcid,
+    xVal.perCapita,
+    xVal.denom,
+    yVal.statVarDcid,
+    yVal.perCapita,
+    yVal.denom,
+  ]);
 
   /**
    * Callback function for building observation specifications.
@@ -341,6 +352,7 @@ export function ChartLoader(): ReactElement {
               />
               <ChartEmbed
                 ref={embedModalElement}
+                entities={Object.keys(chartData.points)}
                 facets={facets}
                 statVarSpecs={currentStatVarSpecs}
                 statVarToFacets={statVarToFacets}
@@ -435,6 +447,7 @@ async function loadData(
     const metadataMap = {
       ...(statResponse.facets || {}),
       ...(statAllResponse.facets || {}),
+      ...(populationData.facets || {}),
     };
 
     const baseFacets: FacetResponse = {};
@@ -583,6 +596,11 @@ function getChartData(
   const sources: Set<string> = new Set();
   let xUnit = "";
   let yUnit = "";
+  const xDenomFacets: Set<string> = new Set();
+  const yDenomFacets: Set<string> = new Set();
+  const xNumerFacets: Set<string> = new Set();
+  const yNumerFacets: Set<string> = new Set();
+
   for (const namedPlace of place.enclosedPlaces) {
     const xDenom = x.perCapita ? x.denom : null;
     const yDenom = y.perCapita ? y.denom : null;
@@ -604,11 +622,38 @@ function getChartData(
         sources.add(source);
       }
     });
+
+    // Compile the used numerator and denominator facets
+    if (placeChartData.xDenomFacet) {
+      xDenomFacets.add(placeChartData.xDenomFacet);
+    }
+    if (placeChartData.yDenomFacet) {
+      yDenomFacets.add(placeChartData.yDenomFacet);
+    }
+
+    const xNumerFacet = xStatData?.[namedPlace.dcid]?.facet;
+    if (xNumerFacet) {
+      xNumerFacets.add(xNumerFacet);
+    }
+    const yNumerFacet = yStatData?.[namedPlace.dcid]?.facet;
+    if (yNumerFacet) {
+      yNumerFacets.add(yNumerFacet);
+    }
+
     points[namedPlace.dcid] = placeChartData.point;
     xUnit = xUnit || placeChartData.xUnit;
     yUnit = yUnit || placeChartData.yUnit;
   }
-  return { points, sources, xUnit, yUnit };
+  return {
+    points,
+    sources,
+    xUnit,
+    yUnit,
+    xDenomFacets,
+    yDenomFacets,
+    xNumerFacets,
+    yNumerFacets,
+  };
 }
 
 function getFacetInfo(
