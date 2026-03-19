@@ -46,4 +46,4 @@ WORKDIR /workspace/static
 EXPOSE 8080
 # Run nodejs server
 # TODO: Check best practices for starting a typescript NodeJS app.
-CMD npx ts-node ./src/server.ts
+CMD npx tsx ./src/server.ts
