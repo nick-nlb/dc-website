@@ -311,12 +311,16 @@ def _handle_answer_places(uttr: nl_uttr.Utterance,
   if not futils.classifications_of_type(
       uttr.classifications, ClassificationType.ANSWER_PLACES_REFERENCE):
     return False
-  if not uttr.prev_utterance or not uttr.prev_utterance.answerPlaces:
+  if not uttr.prev_utterance:
+    return False
+  # Prefer answerPlaces from the previous turn, fallback to input places.
+  ans_places = uttr.prev_utterance.answerPlaces
+  if not ans_places:
+    ans_places = uttr.prev_utterance.places
+  if not ans_places:
     return False
   if not child_type:
     return False
-
-  ans_places = uttr.prev_utterance.answerPlaces
   if uttr.places:
     _append(ans_places, cmp_places)
   elif len(ans_places) > 1:
